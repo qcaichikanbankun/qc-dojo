@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>QC道場 - 外観検査トレーニング</title>
+    <style>
+        body { margin: 0; font-family: -apple-system, sans-serif; background: #222; color: #fff; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+        
+        /* ヘッダー・スコア表示 */
+        #header { padding: 15px; text-align: center; background: #333; display: flex; justify-content: space-between; align-items: center; font-weight: bold; border-bottom: 2px solid #555;}
+        .score-box { font-size: 1.5rem; color: #ffeb3b; }
+        .combo-box { font-size: 1.2rem; color: #00d2ff; }
+
+        /* メインエリア */
+        #game-area { flex-grow: 1; display: flex; justify-content: center; align-items: center; position: relative; overflow: hidden; padding: 20px; }
+        
+        /* 問題カード */
+        .card { 
+            width: 90%; max-width: 380px; height: 60vh; max-height: 500px;
+            background: #fff; border-radius: 20px; 
+            box-shadow: 0 10px 20px rgba(0,0,0,0.5);
+            display: flex; flex-direction: column; justify-content: space-between; align-items: center;
+            position: absolute; transition: transform 0.3s ease, opacity 0.3s ease;
+            color: #333; text-align: center; padding: 20px 0; box-sizing: border-box;
+        }
+        
+        /* 画像表示エリア */
+        .img-container { width: 90%; height: 75%; background: #eee; border-radius: 10px; overflow: hidden; display: flex; justify-content: center; align-items: center; }
+        .img-container img { width: 100%; height: 100%; object-fit: cover; } /* 画像を枠いっぱいに表示 */
+        
+        .card-title { font-size: 1.8rem; font-weight: 900; margin-top: 10px; }
+
+        /* ガイドテキスト */
+        #guide { position: absolute; bottom: 20px; width: 100%; text-align: center; font-size: 1.2rem; color: #aaa; font-weight: bold; pointer-events: none;}
+        .swipe-left { color: #dc3545; }
+        .swipe-right { color: #28a745; }
+
+        /* ボタン操作用（スワイプできない時用） */
+        #btn-area { display: flex; justify-content: space-around; padding: 20px; padding-bottom: 40px; background: #222; }
+        .btn { width: 45%; padding: 20px 0; font-size: 1.5rem; font-weight: 900; border: none; border-radius: 15px; color: white; cursor: pointer; }
+        .btn-ng { background: #dc3545; }
+        .btn-ok { background: #28a745; }
+
+        /* 判定エフェクト */
+        #overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; display: none; z-index: 1000; opacity: 0.5; pointer-events: none; }
+    </style>
+</head>
+<body>
+
+    <div id="header">
+        <div class="score-box">SCORE: <span id="score">0</span></div>
+        <div class="combo-box"><span id="combo">0</span> COMBO!</div>
+    </div>
+
+    <div id="game-area">
+        <div id="card-container">
+            </div>
+        <div id="guide">
+            <span class="swipe-left">← NG（不良）</span> ｜ <span class="swipe-right">OK（良品） →</span>
+        </div>
+    </div>
+
+    <div id="btn-area">
+        <button class="btn btn-ng" onclick="handleSwipe('NG')">✖️ NG</button>
+        <button class="btn btn-ok" onclick="handleSwipe('OK')">⭕️ OK</button>
+    </div>
+
+    <div id="overlay"></div>
+
+<script>
+    // --- 音声関連 ---
+    let audioCtx;
+    function playSound(type) {
+        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        if (audioCtx.state === "suspended") audioCtx.resume();
+        const now = audioCtx.currentTime;
+        const g = audioCtx.createGain(); g.connect(audioCtx.destination);
+        const o = audioCtx.createOscillator(); o.connect(g);
+        
+        if (type === "correct") {
+            o.type = "sine";
+            o.frequency.setValueAtTime(1046.50, now);
+            o.frequency.setValueAtTime(1318.51, now + 0.1);
+            g.gain.setValueAtTime(0.3, now);
+            g.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
+            o.start(now); o.stop(now + 0.3);
+        } else {
+            o.type = "square";
+            o.frequency.setValueAtTime(150, now);
+            g.gain.setValueAtTime(0.3, now);
+            g.gain.linearRampToValueAtTime(0, now + 0.3);
+            o.start(now); o.stop(now + 0.3);
+        }
+    }
+
+    // --- 問題データ（GitHubにアップする画像ファイル名を指定） ---
+    const questions = [
+        { id: 1, type: "OK", label: "良品", img: "img/ok_01.jpg", hint: "綺麗な状態" },
+        { id: 2, type: "NG", label: "ショート", img: "img/short_01.jpg", hint: "端が欠けている（未充填）" },
+        { id: 3, type: "NG", label: "シルバー", img: "img/silver_01.jpg", hint: "表面に銀色の筋が発生" }
+        // 写真が増えたら、ここにカンマ区切りでドンドン追加していけます
+    ];
+
+    let currentQ = null;
+    let score = 0;
+    let combo = 0;
+    let startX = 0;
+    let endX = 0;
+
+    function initGame() {
+        nextQuestion();
+    }
+
+    function nextQuestion() {
+        const randIndex = Math.floor(Math.random() * questions.length);
+        currentQ = questions[randIndex];
+
+        const container = document.getElementById("card-container");
+        container.innerHTML = `
+            <div class="card" id="current-card">
+                <div class="img-container">
+                    <img src="${currentQ.img}" alt="検査画像" onerror="this.onerror=null; this.parentNode.innerHTML='<span style=\\'color:#999;\\'>画像（${currentQ.img}）を配置してください</span>';">
+                </div>
+                <div class="card-title">これ、OK？NG？</div>
+            </div>
+        `;
+
+        const card = document.getElementById("current-card");
+        card.addEventListener('touchstart', e => { startX = e.touches[0].clientX; }, {passive: true});
+        card.addEventListener('touchend', e => {
+            endX = e.changedTouches[0].clientX;
+            handleTouch();
+        });
+    }
+
+    function handleTouch() {
+        const deltaX = endX - startX;
+        if (deltaX > 50) {
+            handleSwipe("OK");
+        } else if (deltaX < -50) {
+            handleSwipe("NG");
+        }
+    }
+
+    function handleSwipe(userAnswer) {
+        const isCorrect = (userAnswer === currentQ.type);
+        const card = document.getElementById("current-card");
+        const overlay = document.getElementById("overlay");
+
+        card.style.transform = userAnswer === "OK" ? "translateX(200px) rotate(20deg)" : "translateX(-200px) rotate(-20deg)";
+        card.style.opacity = "0";
+
+        if (isCorrect) {
+            playSound("correct");
+            score += 100 + (combo * 10);
+            combo++;
+            overlay.style.background = "#28a745";
+        } else {
+            playSound("wrong");
+            combo = 0;
+            overlay.style.background = "#dc3545";
+            alert(`【不正解】\n正解は ${currentQ.type} (${currentQ.label}) です！\nヒント: ${currentQ.hint}`);
+        }
+
+        overlay.style.display = "block";
+        document.getElementById("score").innerText = score;
+        document.getElementById("combo").innerText = combo;
+
+        setTimeout(() => {
+            overlay.style.display = "none";
+            nextQuestion();
+        }, 300);
+    }
+
+    window.onload = initGame;
+</script>
+</body>
+</html>
