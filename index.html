@@ -2,94 +2,119 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>QC道場 - トレーニング</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QC道場 - 品番管理・教育ツール</title>
     <style>
-        body { margin: 0; font-family: sans-serif; background: #222; color: #fff; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
-        #header { padding: 15px; background: #333; text-align: center; font-weight: bold; font-size: 1.2rem; }
-        #game-area { flex-grow: 1; display: flex; justify-content: center; align-items: center; position: relative; }
-        .card { width: 90%; max-width: 400px; height: 60vh; background: #fff; border-radius: 20px; color: #333; display: flex; flex-direction: column; align-items: center; padding: 20px; box-sizing: border-box; }
-        .img-container { width: 100%; height: 70%; background: #eee; border-radius: 10px; overflow: hidden; display: flex; justify-content: center; align-items: center; }
-        .img-container img { width: 100%; height: 100%; object-fit: contain; }
-        #btn-area { display: flex; gap: 10px; padding: 20px; }
-        .btn { flex: 1; padding: 20px; font-size: 1.5rem; font-weight: 900; border: none; border-radius: 15px; color: white; cursor: pointer; }
-        #settings-modal { position: fixed; top:0; left:0; width:100%; height:100%; background:white; color:black; z-index:1000; padding:20px; box-sizing:border-box; overflow-y:auto; }
-        #result-screen { display:none; flex-direction:column; align-items:center; justify-content:center; height:100vh; }
+        body { font-family: sans-serif; background: #1a1a1a; color: #eee; padding: 20px; }
+        .panel { background: #333; padding: 20px; border-radius: 10px; margin-bottom: 20px; }
+        .btn { padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; background: #007bff; color: white; font-weight: bold; }
+        .item { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; border-bottom: 1px solid #555; padding-bottom: 5px; }
+        #game-area { text-align: center; }
+        #game-img { max-width: 100%; max-height: 400px; margin: 20px 0; }
     </style>
 </head>
 <body>
 
-<div id="header">QC道場 - 外観検査トレーニング</div>
+    <div class="panel">
+        <h1>QC道場</h1>
+        <button class="btn" onclick="showMode('admin')">管理モード</button>
+        <button class="btn" onclick="showMode('train')">トレーニング開始</button>
+    </div>
 
-<div id="settings-modal">
-    <h2>1. 検査モードを選択</h2>
-    <div id="image-selector"></div>
-    <button class="btn" style="background:#007bff; margin-top:20px; width:100%;" onclick="startCustomGame()">開始する</button>
-</div>
+    <div id="admin-mode" class="panel" style="display:none;">
+        <h2>品番登録 (○○編)</h2>
+        <input type="text" id="part-name" placeholder="製品品番を入力">
+        <input type="file" id="admin-upload" accept="image/*" multiple>
+        <div id="admin-list" style="margin: 20px 0;"></div>
+        <button class="btn" style="background:#28a745;" onclick="saveData()">データを保存</button>
+    </div>
 
-<div id="game-area">
-    <div id="card-container"></div>
-</div>
+    <div id="train-mode" class="panel" style="display:none;">
+        <h2>トレーニング開始</h2>
+        <select id="part-select" onchange="loadPart()" class="btn" style="background:#555;"></select>
+        <div id="game-area"></div>
+    </div>
 
-<div id="btn-area">
-    <button class="btn" style="background:#dc3545;" onclick="handleSwipe('NG')">NG</button>
-    <button class="btn" style="background:#28a745;" onclick="handleSwipe('OK')">OK</button>
-</div>
+    <script>
+        let currentTrainingData = [];
+        let currentIndex = 0;
+        let score = 0;
 
-<div id="result-screen">
-    <h1>トレーニング終了！</h1>
-    <div id="final-score" style="font-size:2rem; margin:20px;"></div>
-    <button class="btn" style="background:#6c757d;" onclick="location.reload()">最初からやり直す</button>
-</div>
-
-<script>
-    const allQuestions = [
-        { label: "良品", type: "OK", img: "img/ok_01.jpg" },
-        { label: "ショート", type: "NG", img: "img/short_01.jpg" },
-        { label: "シルバー", type: "NG", img: "img/silver_01.jpg" }
-    ];
-
-    let gameQuestions = [];
-    let currentIndex = 0;
-    let score = 0;
-
-    // 設定画面の生成
-    const selector = document.getElementById("image-selector");
-    allQuestions.forEach((q, i) => {
-        selector.innerHTML += `<div style="padding:10px; border-bottom:1px solid #ccc;">
-            <input type="checkbox" id="q${i}" checked> <label for="q${i}">${q.label}</label>
-        </div>`;
-    });
-
-    function startCustomGame() {
-        gameQuestions = allQuestions.filter((_, i) => document.getElementById(`q${i}`).checked);
-        if(gameQuestions.length === 0) return alert("最低1つは選んでください");
-        document.getElementById("settings-modal").style.display = "none";
-        showQuestion();
-    }
-
-    function showQuestion() {
-        if (currentIndex >= gameQuestions.length) {
-            document.getElementById("game-area").style.display = "none";
-            document.getElementById("btn-area").style.display = "none";
-            document.getElementById("result-screen").style.display = "flex";
-            document.getElementById("final-score").innerText = `正解数: ${score} / ${gameQuestions.length}`;
-            return;
+        // モード切替
+        function showMode(mode) {
+            document.getElementById('admin-mode').style.display = mode === 'admin' ? 'block' : 'none';
+            document.getElementById('train-mode').style.display = mode === 'train' ? 'block' : 'none';
+            if(mode === 'train') updatePartList();
         }
 
-        const q = gameQuestions[currentIndex];
-        document.getElementById("card-container").innerHTML = `
-            <div class="card">
-                <div class="img-container"><img src="${q.img}"></div>
-                <div style="margin-top:20px;">問題 ${currentIndex + 1} / ${gameQuestions.length}</div>
-            </div>`;
-    }
+        // 管理：画像登録UI
+        document.getElementById('admin-upload').addEventListener('change', function(e) {
+            const list = document.getElementById('admin-list');
+            for (let file of e.target.files) {
+                const reader = new FileReader();
+                reader.onload = function(event) {
+                    const id = 'sel_' + Date.now() + Math.random();
+                    list.innerHTML += `<div class="item">
+                        <img src="${event.target.result}" style="width:50px; height:50px; object-fit:cover;">
+                        <span>${file.name}</span>
+                        <select id="${id}" data-src="${event.target.result}">
+                            <option value="OK">良品</option>
+                            <option value="ショート">ショート</option>
+                            <option value="シルバー">シルバー</option>
+                        </select>
+                    </div>`;
+                }
+                reader.readAsDataURL(file);
+            }
+        });
 
-    function handleSwipe(ans) {
-        if (ans === gameQuestions[currentIndex].type) score++;
-        currentIndex++;
-        showQuestion();
-    }
-</script>
+        // 管理：保存
+        function saveData() {
+            const name = document.getElementById('part-name').value;
+            if(!name) return alert("品番を入力してください");
+            const selects = document.querySelectorAll('#admin-list select');
+            const data = Array.from(selects).map(s => ({ src: s.dataset.src, label: s.value }));
+            localStorage.setItem('qc_data_' + name, JSON.stringify(data));
+            alert(name + " を保存しました！");
+        }
+
+        // トレーニング：品番リスト更新
+        function updatePartList() {
+            const select = document.getElementById('part-select');
+            select.innerHTML = '<option>品番を選択...</option>';
+            for(let i=0; i<localStorage.length; i++) {
+                const key = localStorage.key(i);
+                if(key.startsWith('qc_data_')) select.innerHTML += `<option value="${key}">${key.replace('qc_data_','')}</option>`;
+            }
+        }
+
+        // トレーニング：ロード＆ゲーム開始
+        function loadPart() {
+            const key = document.getElementById('part-select').value;
+            currentTrainingData = JSON.parse(localStorage.getItem(key));
+            currentIndex = 0;
+            score = 0;
+            playNext();
+        }
+
+        function playNext() {
+            const area = document.getElementById('game-area');
+            if(currentIndex >= currentTrainingData.length) {
+                area.innerHTML = `<h3>終了！正解数: ${score} / ${currentTrainingData.length}</h3>`;
+                return;
+            }
+            const q = currentTrainingData[currentIndex];
+            area.innerHTML = `<img id="game-img" src="${q.src}">
+                <br><button class="btn" onclick="checkAns('OK')">OK</button>
+                <button class="btn" onclick="checkAns('NG')">NG</button>`;
+        }
+
+        function checkAns(ans) {
+            const correctType = (currentTrainingData[currentIndex].label === 'OK' ? 'OK' : 'NG');
+            if(ans === correctType) score++;
+            currentIndex++;
+            playNext();
+        }
+    </script>
 </body>
 </html>
