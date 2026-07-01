@@ -3,62 +3,64 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>QC道場 - ポップ教育アプリ</title>
+    <title>QC Tinder</title>
     <style>
         :root { --primary: #ff6b6b; --accent: #4ecdc4; --bg: #f7fff7; }
-        body { font-family: 'Helvetica Neue', Arial, sans-serif; background: var(--bg); color: #333; padding: 20px; margin: 0; }
-        .card { background: white; border-radius: 20px; padding: 25px; box-shadow: 0 10px 20px rgba(0,0,0,0.05); margin-bottom: 20px; }
-        h1 { color: var(--primary); text-align: center; }
-        .btn { padding: 15px 25px; border: none; border-radius: 50px; cursor: pointer; font-weight: bold; color: white; background: var(--primary); margin: 5px; width: 100%; box-sizing: border-box; }
-        .item { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; border-bottom: 1px solid #eee; padding-bottom: 10px; }
-        #card { background: white; padding: 20px; border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); text-align: center; width: 80vw; max-width: 400px; touch-action: none; transition: transform 0.2s; }
-        #game-img { width: 100%; border-radius: 15px; }
-        .result-item { display: flex; align-items: center; gap: 15px; margin-bottom: 10px; background: white; padding: 15px; border-radius: 15px; border-left: 8px solid var(--accent); }
+        body { font-family: 'Arial', sans-serif; background: var(--bg); margin: 0; padding: 20px; overflow-x: hidden; }
+        .container { max-width: 500px; margin: 0 auto; }
+        .card-stack { position: relative; height: 500px; display: flex; justify-content: center; align-items: center; }
+        #card { position: absolute; width: 100%; background: white; padding: 20px; border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); text-align: center; box-sizing: border-box; touch-action: none; transition: transform 0.2s; }
+        #game-img { width: 100%; border-radius: 15px; pointer-events: none; }
+        .btn { padding: 15px; border-radius: 50px; border: none; color: white; font-weight: bold; cursor: pointer; margin: 5px; width: 100%; }
+        .result-card { background: white; padding: 15px; border-radius: 15px; margin-bottom: 10px; display: flex; align-items: center; gap: 15px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
     </style>
 </head>
 <body>
 
-<div class="card">
-    <h1>🚀 QC道場</h1>
-    <button class="btn" onclick="showMode('admin')">🛠 管理・編集</button>
-    <button class="btn" style="background:var(--accent)" onclick="showMode('train')">🎮 トレーニング開始</button>
-</div>
+<div class="container">
+    <div id="main-ui">
+        <h1>QC Tinder</h1>
+        <button class="btn" style="background:var(--primary)" onclick="showMode('admin')">設定・管理</button>
+        <button class="btn" style="background:var(--accent)" onclick="showMode('train')">トレーニング開始</button>
+    </div>
 
-<div id="admin-mode" class="card" style="display:none;">
-    <h2>品番を登録・編集</h2>
-    <input type="text" id="part-name" placeholder="品番を入力" style="width:100%; padding:10px; border-radius:10px; box-sizing:border-box;">
-    <button class="btn" style="background:#555;" onclick="loadPartForEdit()">読み込み</button>
-    <input type="file" id="admin-upload" accept="image/*" multiple style="margin: 20px 0;">
-    <div id="admin-preview"></div>
-    <button class="btn" onclick="saveData()">保存する</button>
-</div>
+    <div id="admin-mode" style="display:none;">
+        <input type="text" id="part-name" placeholder="品番を入力" style="width:100%; padding:10px; box-sizing:border-box;">
+        <button class="btn" style="background:#555;" onclick="loadPartForEdit()">読み込み</button>
+        <input type="file" id="admin-upload" multiple style="margin:10px 0;">
+        <div id="admin-preview"></div>
+        <button class="btn" style="background:#333;" onclick="saveData()">保存する</button>
+        <button class="btn" style="background:#ccc;" onclick="location.reload()">戻る</button>
+    </div>
 
-<div id="train-mode" class="card" style="display:none;">
-    <h2>トレーニング</h2>
-    <select id="part-select" onchange="loadPart()" style="width:100%; padding:10px; border-radius:10px;"></select>
-    <div id="game-area" style="display:flex; justify-content:center; margin-top:20px;"></div>
+    <div id="train-mode" style="display:none;">
+        <select id="part-select" onchange="loadPart()" style="width:100%; padding:10px; margin-bottom:20px;"></select>
+        <div id="card-stack" class="card-stack"></div>
+    </div>
 </div>
 
 <script>
-    // 音声生成
+    // 音声API（ユーザーが一度触った後に有効化）
+    let audioCtx;
     function playSound(type) {
-        const ctx = new (window.AudioContext || window.webkitAudioContext)();
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.connect(gain); gain.connect(ctx.destination);
+        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.connect(gain); gain.connect(audioCtx.destination);
         if (type === 'ok') {
-            osc.frequency.setValueAtTime(880, ctx.currentTime);
-            osc.frequency.linearRampToValueAtTime(1200, ctx.currentTime + 0.1);
+            osc.frequency.setValueAtTime(880, audioCtx.currentTime);
+            osc.frequency.linearRampToValueAtTime(1200, audioCtx.currentTime + 0.1);
         } else {
             osc.type = 'sawtooth';
-            osc.frequency.setValueAtTime(150, ctx.currentTime);
-            osc.frequency.linearRampToValueAtTime(80, ctx.currentTime + 0.3);
+            osc.frequency.setValueAtTime(150, audioCtx.currentTime);
+            osc.frequency.linearRampToValueAtTime(80, audioCtx.currentTime + 0.3);
         }
-        gain.gain.setValueAtTime(0.2, ctx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
-        osc.start(); osc.stop(ctx.currentTime + 0.3);
+        gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.3);
+        osc.start(); osc.stop(audioCtx.currentTime + 0.3);
     }
 
+    // 画像処理
     function resizeImage(file, callback) {
         const reader = new FileReader();
         reader.onload = (e) => {
@@ -75,55 +77,50 @@
         reader.readAsDataURL(file);
     }
 
+    // UIロジック
     document.getElementById('admin-upload').addEventListener('change', (e) => {
         for (let file of e.target.files) resizeImage(file, (data) => addRow(data, "OK"));
     });
 
     function addRow(src, label) {
-        const id = 's_' + Math.random().toString(36).substr(2, 9);
-        document.getElementById('admin-preview').innerHTML += `<div class="item">
-            <img src="${src}" style="width:60px; height:60px; object-fit:cover; border-radius:10px;">
-            <select id="${id}" data-src="${src}">
+        document.getElementById('admin-preview').innerHTML += `<div style="display:flex; align-items:center; gap:10px; margin:5px 0;">
+            <img src="${src}" style="width:50px; height:50px; object-fit:cover; border-radius:10px;">
+            <select data-src="${src}">
                 <option ${label==='OK'?'selected':''}>OK</option>
                 <option ${label==='キズ'?'selected':''}>キズ</option>
                 <option ${label==='バリ'?'selected':''}>バリ</option>
                 <option ${label==='ヒケ'?'selected':''}>ヒケ</option>
-                <option ${label==='ショート'?'selected':''}>ショート</option>
-                <option ${label==='シルバー'?'selected':''}>シルバー</option>
             </select>
-            <button class="btn" style="background:#ff6b6b; padding:5px 10px; width:auto;" onclick="this.parentElement.remove()">削除</button>
         </div>`;
     }
 
     function saveData() {
         const name = document.getElementById('part-name').value;
-        const data = Array.from(document.querySelectorAll('#admin-preview .item')).map(div => ({
-            src: div.querySelector('select').dataset.src, label: div.querySelector('select').value
+        const data = Array.from(document.querySelectorAll('#admin-preview div')).map(d => ({
+            src: d.querySelector('select').dataset.src, label: d.querySelector('select').value
         }));
         localStorage.setItem('qc_data_' + name, JSON.stringify(data));
-        alert("保存しました！");
+        alert("保存完了");
     }
 
     function loadPartForEdit() {
         const name = document.getElementById('part-name').value;
         const data = JSON.parse(localStorage.getItem('qc_data_' + name));
-        if(!data) return alert("データが見つかりません");
+        if(!data) return alert("データなし");
         document.getElementById('admin-preview').innerHTML = "";
         data.forEach(d => addRow(d.src, d.label));
     }
 
     let currentData = [], idx = 0, score = 0, results = [];
-    
-    function showMode(mode) {
-        document.getElementById('admin-mode').style.display = mode === 'admin' ? 'block' : 'none';
-        document.getElementById('train-mode').style.display = mode === 'train' ? 'block' : 'none';
-        if(mode === 'train') {
+
+    function showMode(m) {
+        document.getElementById('admin-mode').style.display = m === 'admin' ? 'block' : 'none';
+        document.getElementById('train-mode').style.display = m === 'train' ? 'block' : 'none';
+        document.getElementById('main-ui').style.display = 'none';
+        if(m === 'train') {
             const s = document.getElementById('part-select');
-            s.innerHTML = '<option>品番を選択...</option>';
-            for(let i=0; i<localStorage.length; i++) {
-                const k = localStorage.key(i);
-                if(k.startsWith('qc_data_')) s.innerHTML += `<option value="${k}">${k.replace('qc_data_','')}</option>`;
-            }
+            s.innerHTML = '<option>品番選択...</option>';
+            for(let i=0; i<localStorage.length; i++) if(localStorage.key(i).startsWith('qc_data_')) s.innerHTML += `<option value="${localStorage.key(i)}">${localStorage.key(i).replace('qc_data_','')}</option>`;
         }
     }
 
@@ -134,38 +131,39 @@
     }
 
     function playNext() {
-        const area = document.getElementById('game-area');
+        const stack = document.getElementById('card-stack');
         if(idx >= currentData.length) {
-            area.innerHTML = `<h3>結果発表！正解数: ${score}/${currentData.length}</h3>` + results.map((r,i) => `
-                <div class="result-item">
-                    <img src="${r.src}" style="width:50px;height:50px;object-fit:cover;border-radius:10px;">
-                    <span>${i+1}問目: ${r.isCorrect?'⭕️':'❌'} (${r.label})</span>
-                </div>`).join('');
+            stack.innerHTML = `<div style="width:100%"><h3>結果: ${score}/${currentData.length}</h3>` + results.map((r,i) => `
+                <div class="result-card">
+                    <img src="${r.src}" style="width:40px; height:40px; border-radius:10px; object-fit:cover;">
+                    <span>${i+1}問: ${r.isCorrect?'⭕️':'❌'} (${r.label})</span>
+                </div>`).join('') + `</div>`;
             return;
         }
+
         const q = currentData[idx];
-        area.innerHTML = `<div id="card">
+        stack.innerHTML = `<div id="card">
             <img id="game-img" src="${q.src}">
-            <div style="font-size:1.2rem; font-weight:bold;">この製品は？</div>
-            <div style="color:#aaa; margin-top:10px;">← NG (左) | OK (右) →</div>
+            <h3 style="margin:10px 0;">Tinderスワイプで判定</h3>
+            <p style="color:#aaa;">← NG | OK →</p>
         </div>`;
-        
-        let startX = 0;
+
         const card = document.getElementById('card');
+        let startX = 0;
         card.addEventListener('touchstart', e => startX = e.touches[0].clientX);
         card.addEventListener('touchend', e => {
             const diff = e.changedTouches[0].clientX - startX;
             if (Math.abs(diff) > 50) {
                 const ans = diff > 0 ? 'OK' : 'NG';
-                card.style.transform = `translateX(${diff > 0 ? 300 : -300}px) rotate(${diff > 0 ? 30 : -30}deg)`;
-                setTimeout(() => check(ans), 200);
+                card.style.transform = `translateX(${diff > 0 ? 500 : -500}px) rotate(${diff > 0 ? 45 : -45}deg)`;
+                setTimeout(() => check(ans), 150);
             }
         });
     }
 
     function check(ans) {
         const correct = currentData[idx].label === 'OK' ? 'OK' : 'NG';
-        results.push({...currentData[idx], isCorrect: ans === correct, myAns: ans});
+        results.push({...currentData[idx], isCorrect: ans === correct});
         if(ans === correct) { playSound('ok'); score++; } else { playSound('ng'); }
         idx++;
         playNext();
